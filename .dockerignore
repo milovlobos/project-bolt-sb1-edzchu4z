@@ -1,0 +1,11 @@
+.git/
+.gitignore
+*.md
+.env.example
+backups/
+taekwondo.db
+taekwondo.db-shm
+taekwondo.db-wal
+*.csv
+Makefile
+.agents/

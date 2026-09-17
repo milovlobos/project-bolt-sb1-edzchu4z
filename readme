@@ -1,0 +1,2 @@
+cd /home/milo/Descargas/project-bolt-sb1-edzchu4z
+sudo docker compose up --build -d

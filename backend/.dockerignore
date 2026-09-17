@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+taekwondo.db
+taekwondo.db-shm
+taekwondo.db-wal
+.git/
+.gitignore
+*.md
