@@ -16,7 +16,7 @@ from .schemas import (
     BeltSchema, StudentSchema, StudentCreateSchema,
     AttendanceSchema, AttendanceCreateSchema,
     EvaluationSchema, EvaluationCreateSchema,
-    UserResponseSchema, UserCreateSchema, UserLoginSchema,
+    UserResponseSchema, UserCreateSchema, UserUpdateSchema, UserLoginSchema,
     AgeGroupConfigSchema, ExamSchema, ExamCreateSchema,
     ExamResultSchema, ExamResultCreateSchema,
     CourtCreateSchema, CourtUpdateSchema, CourtSchema, CourtEvaluatorInfo,
@@ -96,7 +96,23 @@ def login(login_in: UserLoginSchema, db: Session = Depends(get_db)):
 
 @app.get("/api/users", response_model=List[UserResponseSchema])
 def get_users(db: Session = Depends(get_db)):
-    return db.query(User).filter(User.role.in_(['evaluador', 'lista'])).all()
+    users = db.query(User).filter(User.role.in_(['evaluador', 'lista'])).order_by(User.name).all()
+    result = []
+    for u in users:
+        court_ev = db.query(CourtEvaluator).filter(CourtEvaluator.evaluator_id == u.id).first()
+        c_id = court_ev.court_id if court_ev else None
+        c_name = court_ev.court.name if (court_ev and court_ev.court) else None
+        result.append(UserResponseSchema(
+            id=u.id,
+            name=u.name,
+            email=u.email,
+            role=u.role,
+            age_group=u.age_group,
+            created_at=u.created_at,
+            court_id=c_id,
+            court_name=c_name
+        ))
+    return result
 
 
 @app.post("/api/users", response_model=UserResponseSchema)
@@ -118,6 +134,8 @@ def create_user(user_in: UserCreateSchema, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
 
+    c_id = None
+    c_name = None
     if user_in.court_id:
         court = db.query(Court).filter(Court.id == user_in.court_id).first()
         if court:
@@ -128,9 +146,67 @@ def create_user(user_in: UserCreateSchema, db: Session = Depends(get_db)):
             )
             db.add(ce)
             db.commit()
+            c_id = court.id
+            c_name = court.name
 
     db.refresh(new_user)
-    return new_user
+    return UserResponseSchema(
+        id=new_user.id,
+        name=new_user.name,
+        email=new_user.email,
+        role=new_user.role,
+        age_group=new_user.age_group,
+        created_at=new_user.created_at,
+        court_id=c_id,
+        court_name=c_name
+    )
+
+
+@app.put("/api/users/{user_id}", response_model=UserResponseSchema)
+def update_user(user_id: str, user_in: UserUpdateSchema, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if user_in.name is not None and user_in.name.strip():
+        user.name = user_in.name.strip()
+    if user_in.role is not None:
+        user.role = user_in.role
+    if user_in.password is not None and user_in.password.strip():
+        user.password = user_in.password.strip()
+    if user_in.age_group is not None:
+        user.age_group = user_in.age_group
+
+    if user_in.court_id is not None:
+        # Remove any existing court evaluator records for this user
+        db.query(CourtEvaluator).filter(CourtEvaluator.evaluator_id == user_id).delete()
+        if user_in.court_id:
+            court = db.query(Court).filter(Court.id == user_in.court_id).first()
+            if court:
+                ce = CourtEvaluator(
+                    id=str(uuid.uuid4()),
+                    court_id=user_in.court_id,
+                    evaluator_id=user_id
+                )
+                db.add(ce)
+
+    db.commit()
+    db.refresh(user)
+
+    court_ev = db.query(CourtEvaluator).filter(CourtEvaluator.evaluator_id == user.id).first()
+    c_id = court_ev.court_id if court_ev else None
+    c_name = court_ev.court.name if (court_ev and court_ev.court) else None
+
+    return UserResponseSchema(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        age_group=user.age_group,
+        created_at=user.created_at,
+        court_id=c_id,
+        court_name=c_name
+    )
 
 
 @app.delete("/api/users/{user_id}")

@@ -13,9 +13,18 @@ class UserCreateSchema(UserBase):
     password: str
     court_id: Optional[str] = None
 
+class UserUpdateSchema(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
+    age_group: Optional[str] = None
+    court_id: Optional[str] = None
+
 class UserResponseSchema(UserBase):
     id: str
     created_at: datetime
+    court_id: Optional[str] = None
+    court_name: Optional[str] = None
 
     class Config:
         from_attributes = True

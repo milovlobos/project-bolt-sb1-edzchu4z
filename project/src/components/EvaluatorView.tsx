@@ -342,7 +342,7 @@ export default function EvaluatorView() {
   }
 
   if (showResults) {
-    return <ResultsSummary onClose={() => setShowResults(false)} />;
+    return <ResultsSummary onClose={() => setShowResults(false)} evaluatorId={user?.id} />;
   }
 
   return (

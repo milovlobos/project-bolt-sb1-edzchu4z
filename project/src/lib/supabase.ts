@@ -32,6 +32,19 @@ export async function saveEvaluator(user: Omit<User, 'id' | 'created_at'> & { co
   return response.json();
 }
 
+export async function updateUser(userId: string, data: Partial<User> & { court_id?: string | null }): Promise<User> {
+  const response = await fetch(`/api/users/${userId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to update user');
+  }
+  return response.json();
+}
+
 export async function deleteEvaluator(userId: string): Promise<void> {
   const response = await fetch(`/api/users/${userId}`, {
     method: 'DELETE'
@@ -185,6 +198,8 @@ export type User = {
   age_group: string | null;
   created_at: string;
   password?: string; // Optional for evaluator creation input
+  court_id?: string | null;
+  court_name?: string | null;
 };
 
 export type AgeGroupConfig = {

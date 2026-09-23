@@ -34,8 +34,11 @@ help: ## Muestra esta ayuda
 
 .PHONY: up
 up: env-check ## 🚀 Construye y levanta todos los servicios (producción)
+	@echo "$(YELLOW)>>> Deteniendo servicios anteriores...$(NC)"
+	-$(COMPOSE) -p $(PROJECT_NAME) down --remove-orphans 2>/dev/null || true
+	-$(DOCKER) rm -f tkd-backend tkd-frontend 2>/dev/null || true
 	@echo "$(GREEN)>>> Construyendo y levantando servicios...$(NC)"
-	$(COMPOSE) -p $(PROJECT_NAME) --env-file $(ENV_FILE) up -d --build
+	$(COMPOSE) -p $(PROJECT_NAME) --env-file $(ENV_FILE) up -d --build --remove-orphans
 	@echo ""
 	@echo "$(GREEN)✔ Sistema levantado correctamente$(NC)"
 	@echo "  Frontend: http://localhost:$$(grep -oP 'FRONTEND_PORT=\K.*' $(ENV_FILE) 2>/dev/null || echo 4000)"

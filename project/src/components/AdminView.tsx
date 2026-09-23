@@ -6,7 +6,7 @@ import {
   MapPinned, Key, Copy, ChevronDown, ChevronUp, UserPlus, Edit3, X, XCircle
 } from 'lucide-react';
 import { 
-  getEvaluators, saveEvaluator, deleteEvaluator, getAgeGroups, 
+  getEvaluators, saveEvaluator, updateUser, deleteEvaluator, getAgeGroups, 
   getStudents, getAttendance, saveAttendance, StudentWithBelt, User, AgeGroupConfig, 
   createExam, activateExam, uploadStudentsCSV, getExamStudents, Exam,
   Court, CourtEvaluatorCreate,
@@ -16,6 +16,7 @@ import {
 } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useEvaluation } from '../contexts/EvaluationContext';
+import ResultsSummary from './ResultsSummary';
 
 export default function AdminView() {
   const [evaluators, setEvaluators] = useState<User[]>([]);
@@ -242,20 +243,44 @@ export default function AdminView() {
     if (!newName || !newPassword) return;
     setActionLoading(true);
     try {
-      const newUser = await saveEvaluator({
+      await saveEvaluator({
         password: newPassword,
         name: newName,
         role: newRole,
         age_group: newAgeGroup,
         court_id: selectedUserCourtId || undefined
       });
-      setEvaluators(prev => [...prev, newUser]);
+      const [evs, crts] = await Promise.all([
+        getEvaluators().catch(() => []),
+        selectedFolderExam ? getExamCourts(selectedFolderExam.id).catch(() => []) : Promise.resolve([])
+      ]);
+      setEvaluators(evs);
+      setCourts(crts);
       setNewName('');
       setNewPassword('');
       setSelectedUserCourtId('');
       showSuccess(newRole === 'lista' ? 'Juez de Piso creado con éxito y asignado a su cancha' : 'Evaluador creado con éxito');
     } catch (err: any) {
       alert(err.message || 'Error al crear usuario');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAssignCourtToUser = async (userId: string, courtId: string) => {
+    setActionLoading(true);
+    try {
+      await updateUser(userId, { court_id: courtId || null });
+      const targetExamId = selectedFolderExam?.id || selectedExamId || activeExam?.id;
+      const [evs, crts] = await Promise.all([
+        getEvaluators().catch(() => []),
+        targetExamId ? getExamCourts(targetExamId).catch(() => []) : Promise.resolve([])
+      ]);
+      setEvaluators(evs);
+      setCourts(crts);
+      showSuccess('Cancha asignada al usuario correctamente');
+    } catch (err: any) {
+      alert(err.message || 'Error al asignar cancha al usuario');
     } finally {
       setActionLoading(false);
     }
@@ -1784,9 +1809,9 @@ export default function AdminView() {
                     <div className="grid gap-3">
                       {evaluators.length > 0 ? (
                         evaluators.map(ev => (
-                          <div key={ev.id} className="bg-slate-700/20 border border-slate-700 rounded-xl p-4 flex items-center justify-between gap-4">
+                          <div key={ev.id} className="bg-slate-700/20 border border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-bold text-white text-base">{ev.name}</p>
                                 {ev.role === 'lista' ? (
                                   <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
@@ -1797,22 +1822,51 @@ export default function AdminView() {
                                     Evaluador
                                   </span>
                                 )}
+                                {ev.court_name ? (
+                                  <span className="text-[10px] font-bold text-violet-300 bg-violet-500/20 px-2 py-0.5 rounded-full border border-violet-500/30">
+                                    {ev.court_name}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">
+                                    Sin Cancha
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-xs text-slate-400 mt-0.5">Usuario: <strong className="text-slate-200">{ev.name}</strong></p>
+                              <p className="text-xs text-slate-400 mt-1">Usuario: <strong className="text-slate-200">{ev.name}</strong></p>
                               {ev.role === 'evaluador' && (
                                 <span className="inline-block mt-1.5 text-[10px] font-semibold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700 capitalize">
                                   Grupo: {ev.age_group || 'Sin filtro por grupo'}
                                 </span>
                               )}
                             </div>
-                            <button
-                              onClick={() => handleDeleteEvaluator(ev.id)}
-                              disabled={actionLoading}
-                              className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                              title="Eliminar evaluador"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
+
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                                <label className="text-[10px] text-slate-400 font-semibold uppercase px-1">Cancha:</label>
+                                <select
+                                  value={ev.court_id || ''}
+                                  onChange={e => handleAssignCourtToUser(ev.id, e.target.value)}
+                                  disabled={actionLoading}
+                                  className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-semibold cursor-pointer"
+                                >
+                                  <option value="">-- Sin Cancha --</option>
+                                  {courts.map(c => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <button
+                                onClick={() => handleDeleteEvaluator(ev.id)}
+                                disabled={actionLoading}
+                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                                title="Eliminar evaluador"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
                           </div>
                         ))
                       ) : (
@@ -1828,122 +1882,8 @@ export default function AdminView() {
 
             {/* ================= PESTAÑA: RESULTADOS DEL EXAMEN ================= */}
             {examSubTab === 'resultados' && (
-              <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 shadow-xl space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-bold text-white">Consolidado de Resultados - {selectedFolderExam.name}</h2>
-                    <p className="text-xs text-slate-400">Promedio general consolidado de las evaluaciones para este examen</p>
-                  </div>
-
-                  <div className="relative w-full sm:w-80">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      value={folderSearchQuery}
-                      onChange={e => setFolderSearchQuery(e.target.value)}
-                      placeholder="Buscar alumno en este examen..."
-                      className="w-full bg-slate-700/50 border border-slate-600 rounded-xl pl-10 pr-4 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3">
-                  {filteredFolderStudents.length > 0 ? (
-                    filteredFolderStudents.map(student => {
-                      const avg = calculateAverage(student.id);
-                      const isAbsent = attendance.get(student.id) === false;
-                      const badge = getStudentBadge(avg);
-
-                      return (
-                        <div
-                          key={student.id}
-                          className={`bg-slate-700/20 border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                            isAbsent ? 'border-red-500/25 opacity-70' : 'border-slate-700'
-                          }`}
-                        >
-                          {(() => {
-                            const bs = getBeltStyle(student.belts);
-                            return (
-                              <div className="flex items-center gap-3">
-                                <div className={`w-3.5 h-10 rounded-full ${bs.className} shadow-sm`} style={bs.style} />
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="font-bold text-white text-base">{student.first_name} {student.last_name}</h3>
-                                    {isAbsent && (
-                                      <span className="flex items-center gap-1 bg-red-500/10 text-red-400 border border-red-500/20 text-xs px-2 py-0.5 rounded-full font-bold">
-                                        <AlertCircle className="w-3.5 h-3.5" />
-                                        Ausente
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-slate-400 mt-0.5">
-                                    Cinturón {student.belts?.name || 'Blanco'} • {student.age !== null ? `${student.age} años` : ''} • Rango: <span className="capitalize">{student.age_group || 'Ninguno'}</span>
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                            <div className="flex items-center gap-4 sm:gap-6 justify-between sm:justify-end">
-                              {/* Direct Attendance Toggle for Admin */}
-                              <div className="flex items-center gap-1.5 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleStudentAttendance(student.id, true)}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                                    !isAbsent
-                                      ? 'bg-green-500 text-slate-900 shadow-md'
-                                      : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-                                  }`}
-                                  title="Marcar Presente (aparece en lista del evaluador)"
-                                >
-                                  <CheckCircle className="w-3.5 h-3.5" />
-                                  <span>Presente</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleStudentAttendance(student.id, false)}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                                    isAbsent
-                                      ? 'bg-red-500 text-white shadow-md'
-                                      : 'text-slate-400 hover:bg-slate-700 hover:text-white'
-                                  }`}
-                                  title="Marcar Ausente (se oculta de la lista del evaluador)"
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                  <span>Ausente</span>
-                                </button>
-                              </div>
-
-                              <div className="text-center sm:text-right">
-                                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Promedio Consolidado</p>
-                                <p className={`text-2xl font-bold ${isAbsent ? 'text-red-400' : 'text-amber-400'}`}>
-                                  {isAbsent ? '0.00' : avg.toFixed(2)}
-                                </p>
-                              </div>
-
-                              <div className="text-center sm:text-right min-w-[80px]">
-                                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Resultado</p>
-                                {isAbsent ? (
-                                  <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/25">
-                                    Ausente
-                                  </span>
-                                ) : (
-                                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${badge.bg} border`}>
-                                    {badge.label}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-12 text-slate-500 bg-slate-700/5 rounded-xl">
-                      No se encontraron alumnos en esta carpeta de examen.
-                    </div>
-                  )}
-                </div>
+              <div className="pt-2">
+                <ResultsSummary onClose={() => setExamSubTab('planillas')} />
               </div>
             )}
           </div>
